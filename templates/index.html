@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>1-es vonal késés monitor</title>
+
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>1</text></svg>">
+
+    <meta http-equiv="refresh" content="300">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f0f2f5;
+            color: #1c1e21;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        header {
+            padding-bottom: 10px;
+            margin-bottom: 25px;
+            text-align: center;
+        }
+        h1 {
+            color: #005a9c;
+            margin: 0;
+            font-size: 2.5em;
+        }
+        .timestamp {
+            font-style: italic;
+            color: #555;
+            font-size: 1em;
+            margin-top: 10px;
+        }
+
+        .message-box {
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 1.1em;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .message-box.info {
+            background-color: #e6f7ff;
+            border: 1px solid #b3e0ff;
+            color: #005a9c;
+        }
+        .message-box.warning {
+            background-color: #fffbe6;
+            border: 1px solid #ffe580;
+            color: #735a00;
+        }
+
+        .train-card {
+            background-color: #ffffff;
+            border: 1px solid #dddfe2;
+            border-radius: 12px;
+            padding: 20px 25px;
+            margin-bottom: 16px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            display: grid;
+            grid-template-columns: 120px 1fr;
+            gap: 25px;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        .delay {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            color: #d93025;
+        }
+        .delay-dot {
+            font-size: 1.5em;
+            line-height: 1;
+        }
+        .delay-time {
+            font-size: 2.8em;
+            font-weight: 700;
+            line-height: 1.1;
+        }
+        .delay-time span {
+            font-size: 0.5em;
+            font-weight: 500;
+            color: #333;
+            display: block;
+            margin-top: -5px;
+        }
+
+        .details {
+            padding-left: 25px;
+            border-left: 2px solid #f0f2f5;
+            min-width: 0;
+        }
+        .details h2 {
+            margin: 0 0 8px 0;
+            font-size: 1.5em;
+            color: #005a9c;
+            overflow-wrap: break-word;
+            word-wrap: break-word;
+        }
+        .details p {
+            margin: 6px 0;
+            font-size: 1.1em;
+            line-height: 1.5;
+            overflow-wrap: break-word;
+            word-wrap: break-word;
+        }
+
+        .no-trains {
+            text-align: center;
+            font-size: 1.2em;
+            color: #006400;
+            padding: 40px;
+            background-color: #f0fff0;
+            border: 1px solid #b3d9b3;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        }
+
+        .refresh-container {
+            text-align: center;
+            margin: 30px 0 15px 0;
+        }
+        .refresh-button {
+            display: inline-block;
+            background-color: #005a9c;
+            color: #ffffff;
+            padding: 12px 25px;
+            font-size: 1.1em;
+            font-weight: 500;
+            text-decoration: none;
+            border-radius: 8px;
+            transition: background-color 0.2s ease;
+        }
+        .refresh-button:hover {
+            background-color: #004a80;
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 15px;
+            font-size: 0.9em;
+            color: #888;
+        }
+
+        .credit-footer {
+            text-align: center;
+            margin-top: 25px;
+            padding-bottom: 10px;
+            font-size: 1em;
+        }
+        .credit-footer a {
+            color: #005a9c;
+            text-decoration: none;
+        }
+        .credit-footer a:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 600px) {
+            .train-card {
+                grid-template-columns: 1fr;
+                gap: 15px;
+            }
+            .delay {
+                flex-direction: row;
+                align-items: baseline;
+                gap: 10px;
+            }
+            .delay-dot {
+                font-size: 1.2em;
+            }
+            .delay-time {
+                font-size: 2.5em;
+            }
+            .details {
+                padding-left: 0;
+                border-left: none;
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>1-es vonal késés monitor</h1>
+            <p>A 1-es (Budapest–Hegyeshalom) és 12-es (Oroszlány) vonal késő vonatai.</p>
+            <p class="timestamp">Utolsó valós frissítés: {{ update_time }}</p>
+        </header>
+
+        {% if message %}
+        <div class="message-box {{ message_type }}">
+            {{ message }}
+        </div>
+        {% endif %}
+
+
+        {% if trains %}
+            {% for train in trains %}
+            <div class="train-card">
+                <div class="delay">
+                    <div class="delay-dot">🔴</div>
+                    <div class="delay-time">{{ train.delay_min }} <span>perc</span></div>
+                </div>
+                <div class="details">
+                    <h2>🚄 {{ train.name }}</h2>
+                    <p>➡️ <strong>Úti cél:</strong> {{ train.destination }}</p>
+                    <p>🚉 <strong>Köv. megálló:</strong> {{ train.next_stop }}</p>
+                    <p>💨 <strong>Sebesség:</strong> {{ train.speed }}</p>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="no-trains">
+                ✅ Jelenleg nincs késő vonat a figyelt vonalon.
+            </div>
+        {% endif %}
+
+        <div class="refresh-container">
+            <a href="/?force=true" class="refresh-button">Adatok frissítése</a>
+        </div>
+
+        <footer>
+            Figyelt járművek a hálózaton: {{ vehicle_count }} | Az oldal 5 percenként frissül.
+        </footer>
+    </div>
+
+    <footer class="credit-footer">
+        <a href="https://discordapp.com/users/justakos91" target="_blank" rel="noopener noreferrer">Made with ❤️ by Ákos</a>
+    </footer>
+</body>
+</html>
