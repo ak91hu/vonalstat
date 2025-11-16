@@ -9,7 +9,10 @@ from zoneinfo import ZoneInfo
 
 app = Flask(__name__)
 
-cached_data = []
+cached_delayed_trains = []
+cached_all_trains = []
+cached_line_1_count = 0 
+
 last_fetch_time = None
 vehicle_count = 0
 cache_lock = threading.Lock()
@@ -36,6 +39,7 @@ GRAPHQL_QUERY = """
       gtfsId
       tripHeadsign
       directionId
+      tripShortName 
       route {
         shortName
         longName
@@ -81,7 +85,7 @@ def clean_html(raw_html):
         return ""
     cleanr = re.compile('<.*?>|&.*?;')
     cleantext = re.sub(cleanr, '', raw_html)
-    return cleantext
+    return cleantext.strip()
 
 def get_delayed_trains_data():
     print("GYORSÍTÓTÁR FRISSÍTÉSE: Új adatok lekérése a MÁV API-tól...")
@@ -92,11 +96,13 @@ def get_delayed_trains_data():
         
         if "data" not in data or "vehiclePositions" not in data["data"]:
             print("Hiba: Nem található 'vehiclePositions' az API válaszában.")
-            return [], 0 
+            return [], [], 0, 0 
 
         all_vehicles = data["data"]["vehiclePositions"]
         vehicle_count_now = len(all_vehicles) 
+        
         filtered_delayed_trains = []
+        all_line_1_trains = []
 
         for vehicle in all_vehicles:
             trip = vehicle.get("trip")
@@ -135,6 +141,33 @@ def get_delayed_trains_data():
             if not is_on_line_1:
                 continue
             
+            vonatszam_raw = vehicle.get("trip", {}).get("tripShortName", "")
+            vonatszam = clean_html(vonatszam_raw)
+
+            train_longName = vehicle.get("trip", {}).get("route", {}).get("longName", "Ismeretlen")
+            if "/" in train_longName:
+                train_longName = train_longName.split('/')[0].strip()
+
+            train_shortName_raw = vehicle.get("trip", {}).get("route", {}).get("shortName", "")
+            train_shortName = clean_html(train_shortName_raw)
+
+            parts = []
+            if vonatszam:
+                parts.append(vonatszam)
+            
+            parts.append(train_longName)
+            vonat_nev = " ".join(parts)
+
+            if train_shortName and train_shortName != train_longName:
+                vonat_nev = f"{vonat_nev} ({train_shortName})"
+            
+            train_headsign = vehicle.get("trip", {}).get("tripHeadsign", "Ismeretlen")
+            
+            all_line_1_trains.append({
+                "name": vonat_nev,
+                "destination": train_headsign
+            })
+            
             delay_sec = 0
             if nextStop:
                 arrival_delay = nextStop.get("arrivalDelay", 0) or 0
@@ -142,18 +175,9 @@ def get_delayed_trains_data():
                 delay_sec = max(arrival_delay, departure_delay)
             
             if delay_sec > 0:
-                train_longName = vehicle.get("trip", {}).get("route", {}).get("longName", "Ismeretlen")
-                train_shortName_raw = vehicle.get("trip", {}).get("route", {}).get("shortName", "Ismeretlen")
-                train_shortName = clean_html(train_shortName_raw)
-                train_headsign = vehicle.get("trip", {}).get("tripHeadsign", "Ismeretlen")
-
                 speed_kmh = vehicle.get("speed")
                 speed_str = f"{int(speed_kmh)} km/h" if speed_kmh is not None else "N/A"
                 delay_min = int(delay_sec / 60)
-                
-                vonat_nev = train_longName
-                if "S" in vonat_nev or "G" in vonat_nev or "Z" in vonat_nev:
-                     vonat_nev = f"{train_longName} ({train_shortName})"
                 
                 train_data = {
                     "delay_min": delay_min,
@@ -169,18 +193,19 @@ def get_delayed_trains_data():
 
         filtered_delayed_trains.sort(key=lambda x: x['delay_sec'], reverse=True)
         
-        return filtered_delayed_trains, vehicle_count_now
+        line_1_count = len(all_line_1_trains)
+        return filtered_delayed_trains, all_line_1_trains, vehicle_count_now, line_1_count
 
     except requests.exceptions.RequestException as e:
         print(f"Hiba az adatlekérés során: {e}")
-        return [], 0
+        return [], [], 0, 0
     except json.JSONDecodeError:
         print("Hiba: Nem sikerült feldgozni a szerver válaszát (JSON).")
-        return [], 0
+        return [], [], 0, 0
 
 @app.route('/')
 def index():
-    global cached_data, last_fetch_time, vehicle_count, last_force_fetch_time
+    global cached_delayed_trains, cached_all_trains, cached_line_1_count, last_fetch_time, vehicle_count, last_force_fetch_time
     
     now = datetime.now(HUNGARY_TZ)
     force_refresh = request.args.get('force') == 'true'
@@ -204,11 +229,13 @@ def index():
             perform_refresh = True
         
         if perform_refresh:
-            new_data, new_vehicle_count = get_delayed_trains_data()
+            new_delayed, new_all, new_vehicle_count, new_line_1_count = get_delayed_trains_data()
             
             if new_vehicle_count > 100:
                 print(f"Sikeres frissítés. Járműszám: {new_vehicle_count}. Cache frissítve.")
-                cached_data = new_data
+                cached_delayed_trains = new_delayed
+                cached_all_trains = new_all
+                cached_line_1_count = new_line_1_count
                 vehicle_count = new_vehicle_count
                 last_fetch_time = now
             else:
@@ -225,8 +252,10 @@ def index():
     update_time_str = display_time.strftime("%Y-%m-%d %H:%M:%S %Z")
 
     return render_template('index.html', 
-                           trains=cached_data, 
+                           delayed_trains=cached_delayed_trains, 
+                           all_trains=cached_all_trains,
                            vehicle_count=vehicle_count, 
+                           line_1_count=cached_line_1_count,
                            update_time=update_time_str,
                            message=message,
                            message_type=message_type)
