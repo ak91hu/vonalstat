@@ -33,3 +33,5 @@ Futtassa a konténert, és irányítsa át a portot. (A 8080-as port szabadon v�
 ```bash
 docker run -d -p 8080:5000 --name mav-web mav-web-app
 ```
+
+![How it works](sc_sample.jpg)
