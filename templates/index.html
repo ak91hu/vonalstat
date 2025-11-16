@@ -160,13 +160,42 @@
             background-color: #004a80;
         }
         
-        footer {
-            text-align: center;
-            margin-top: 15px;
-            font-size: 0.9em;
-            color: #888;
+        .all-trains-section {
+            background-color: #ffffff;
+            border: 1px solid #dddfe2;
+            border-radius: 12px;
+            padding: 20px 25px;
+            margin-top: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
         }
-        
+        .all-trains-section h2 {
+            margin: 0 0 15px 0;
+            color: #005a9c;
+            border-bottom: 2px solid #f0f2f5;
+            padding-bottom: 10px;
+        }
+        .all-trains-section p {
+            font-size: 1.1em;
+            color: #555;
+            margin-top: -10px;
+            line-height: 1.6;
+        }
+        .all-trains-list {
+            list-style-type: none;
+            padding-left: 0;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .all-trains-list li {
+            padding: 10px 5px;
+            border-bottom: 1px solid #f0f2f5;
+            font-size: 1.1em;
+        }
+        .all-trains-list li:last-child {
+            border-bottom: none;
+        }
+
         .credit-footer {
             text-align: center;
             margin-top: 25px; 
@@ -289,9 +318,9 @@
         </div>
         {% endif %}
 
-
-        {% if trains %}
-            {% for train in trains %}
+        
+        {% if delayed_trains %}
+            {% for train in delayed_trains %}
             <div class="train-card">
                 <div class="delay">
                     <div class="delay-dot">🔴</div>
@@ -301,7 +330,8 @@
                     <h2 class="train-name"
                         data-lat="{{ train.lat }}"
                         data-lon="{{ train.lon }}"
-                        data-name="{{ train.name }}">
+                        data-name="{{ train.name }}"
+                        data-delay="{{ train.delay_min }}">
                         🚄 {{ train.name }}
                     </h2>
                     <p>➡️ <strong>Úti cél:</strong> {{ train.destination }}</p>
@@ -316,13 +346,25 @@
             </div>
         {% endif %}
 
+
         <div class="refresh-container">
             <a href="/?force=true" class="refresh-button">Adatok frissítése</a>
         </div>
 
-        <footer>
-            Figyelt járművek a hálózaton: {{ vehicle_count }} | Az oldal 5 percenként frissül.
-        </footer>
+        <div class="all-trains-section">
+            <h2>Aktuális járatok (1-es és 12-es vonal)</h2>
+            <p>
+                Figyelt járművek a teljes hálózaton: {{ vehicle_count }}<br>
+                Figyelt járművek az 1-es és 12-es vonalon: {{ line_1_count }}
+            </p>
+            <ul class="all-trains-list">
+                {% for train in all_trains %}
+                    <li><b>{{ train.name }}</b> ➡️ {{ train.destination }}</li>
+                {% else %}
+                    <li>Jelenleg nincsenek aktív járatok a figyelt vonalakon.</li>
+                {% endfor %}
+            </ul>
+        </div>
     </div>
     
     <footer class="credit-footer">
@@ -338,7 +380,7 @@
         var modal = document.getElementById("map-modal");
         var mapTitle = document.getElementById("map-title");
 
-        function showMap(lat, lon, name) {
+        function showMap(lat, lon, name, delay) {
             if (!lat || !lon || lat === 'None' || lon === 'None') {
                 alert("Ehhez a vonathoz jelenleg nincsenek pozícióadatok.");
                 return;
@@ -360,6 +402,9 @@
 
             var marker = L.marker([lat, lon]).addTo(map);
             
+            var popupContent = "<b>" + name + "</b><br>Késés: " + delay + " perc";
+            marker.bindPopup(popupContent).openPopup();
+            
             setTimeout(function() {
                 map.invalidateSize();
             }, 100);
@@ -380,7 +425,8 @@
                     var lat = this.getAttribute('data-lat');
                     var lon = this.getAttribute('data-lon');
                     var name = this.getAttribute('data-name');
-                    showMap(lat, lon, name);
+                    var delay = this.getAttribute('data-delay');
+                    showMap(lat, lon, name, delay);
                 });
             });
         });
